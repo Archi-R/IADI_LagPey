@@ -1,0 +1,5 @@
+cityhash
+python-dotenv
+pandas
+elasticsearch
+scikit-learn
