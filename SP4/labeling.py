@@ -13,12 +13,12 @@ def load_ground_truth(gt_path: str)->list[dict]:
         reader = csv.DictReader(f, delimiter=',')
         for row in reader:
             gt_data.append({
-                'start': float(row['first_timestamp']),
-                'end': float(row['last_timestamp']),
-                'src_ip': row['ip_src'],
-                'dst_ip': row['ip_dst'],
-                'src_port': row['port_src'],
-                'dst_port': row['port_dst'],
+                'start': float(row['first_timestamp_ms']),
+                'end': float(row['last_timestamp_ms']),
+                'src_ip': row['src_ip'],
+                'dst_ip': row['dst_ip'],
+                'src_port': row['src_port'],
+                'dst_port': row['dst_port'],
                 'protocol': row['protocol']
             })
     return gt_data
