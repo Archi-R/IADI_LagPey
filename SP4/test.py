@@ -38,41 +38,41 @@ LIMIT = 1  # Limite pour le nombre de fichiers à traiter
 
 # Liste des pcap
 if __name__ == '__main__':
-    if (0):
-        pcap_files = [f for f in os.listdir(pcap_dir) if f.endswith(".pcap")]
 
-        # 1. Transformation des pcap en csv
-        csv_files = []
-        i = 0
-        for pcap in pcap_files:
-            if i >= LIMIT: break
-            pcap_path = os.path.join(pcap_dir, pcap)
-            # csv_path = pcap_to_csv(pcap_path)
-            csv_path = "..\\pcap_folder\\dataset\\csv\\trace_a_1.csv.temp"
-            csv_path = csv_cleaner(csv_path)
-            i += 1
-        csv_files = [os.path.join(csv_dir, f) for f in os.listdir(csv_dir) if f.endswith(".csv")]
+    pcap_files = [f for f in os.listdir(pcap_dir) if f.endswith(".pcap")]
 
-        # 2. Enrichissement avec fan_in/fan_out
-        # On peut éventuellement concaténer tous les CSV en un seul avant fan_in/out
-        # Supposons qu'on fasse fan_in/out sur chaque CSV individuellement (adapter si besoin)
-        enriched_csv_files = []
-        for csv_file in csv_files:
-            enriched_csv = add_fan_features(csv_file, time_window=time_window)
-            enriched_csv_files.append(enriched_csv)
+    print("1. Transformation des pcap en csv")
+    csv_files = []
+    i = 0
+    for pcap in pcap_files:
+        if i >= LIMIT: break
+        pcap_path = os.path.join(pcap_dir, pcap)
+        csv_path = pcap_to_csv(pcap_path)
+        # csv_path = "..\\pcap_folder\\dataset\\csv\\trace_a_1.csv.temp"
+        csv_path = csv_cleaner(csv_path)
+        i += 1
+    csv_files = [os.path.join(csv_dir, f) for f in os.listdir(csv_dir) if f.endswith(".csv")]
 
-        # Optionnel : concaténer tous les CSV enrichis en un seul dataset global
+    print("2. Enrichissement avec fan_in/fan_out")
+    # On peut éventuellement concaténer tous les CSV en un seul avant fan_in/out
+    # Supposons qu'on fasse fan_in/out sur chaque CSV individuellement (adapter si besoin)
+    enriched_csv_files = []
+    for csv_file in csv_files:
+        enriched_csv = add_fan_features(csv_file, time_window=time_window)
+        enriched_csv_files.append(enriched_csv)
 
-        all_data = pd.concat([pd.read_csv(f) for f in enriched_csv_files], ignore_index=True)
-        global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
-        all_data.to_csv(global_csv, index=False)
+    print("2.5 Concaténer tous les CSV enrichis en un seul dataset global")
+
+    all_data = pd.concat([pd.read_csv(f) for f in enriched_csv_files], ignore_index=True)
+    global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
+    all_data.to_csv(global_csv, index=False)
 
     global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
 
-    # 3. Labeling des flux avec TRAIN.gt
+    print("3. Labeling des flux avec TRAIN.gt")
     labeled_csv = label_flows(global_csv, train_gt_path)
 
-    # 4. Vectorisation
+    print("4. Vectorisation")
     # Ici, tu dois avoir déjà défini protocol_one_hot_vector, apps_one_hot_vector, ip_split,
     # id,expiration_id,src_ip,src_mac,src_oui,src_port,dst_ip,dst_mac,dst_oui,dst_port,
     # protocol,ip_version,vlan_id,tunnel_id,
@@ -91,7 +91,7 @@ if __name__ == '__main__':
                            numeric_cols=numeric_cols,
                            label_col='label')
 
-    # 5. Préparation pour la cross-validation
+    print("5. Préparation pour la cross-validation")
     # Note: cette fonction nécessite un CSV. On va donc réécrire X,y dans un CSV temporaire si besoin.
     final_df = pd.DataFrame(X)
     final_df['label'] = y

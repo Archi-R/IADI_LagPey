@@ -15,24 +15,26 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
     Returns :
         X, y : Matrices (ou DataFrame/array) de features et vecteur des labels.
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path, low_memory=False)
 
     if categorical_cols is None:
         categorical_cols = ['protocol', 'application_name']
 
     if numeric_cols is None:
-        # Exemples de colonnes numériques, adapter selon la structure
         numeric_cols = [
             'bidirectional_packets', 'bidirectional_bytes', 'fan_in', 'fan_out',
             'bidirectional_duration_ms', 'bidirectional_mean_interarrival_time_ms',
             'bidirectional_std_interarrival_time_ms'
         ]
 
-    # Séparer X et y
+    # Check if the required columns exist
+    missing_cols = [col for col in numeric_cols if col not in df.columns]
+    if missing_cols:
+        raise KeyError(f"Columns {missing_cols} not in index")
+
     y = df[label_col].values
     x = df[categorical_cols + numeric_cols].copy()
 
-    # utilisation des protocol_one_hot_vector et apps_one_hot_vector
     for col in categorical_cols:
         if col == 'protocol':
             x['protocol'] = x['protocol'].apply(protocol_one_hot_vector)
@@ -41,34 +43,29 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
         elif col == 'src_ip' or col == 'dst_ip':
             x[col] = x[col].apply(ip_split)
 
-        # Convertir les listes/arrays en colonnes
-        # Pour le protocole
-        if 'protocol' in x.columns:
-            protocol_expanded = pd.DataFrame(x['protocol'].tolist(), index=x.index)
-            protocol_expanded.columns = [f'protocol_{i}' for i in range(protocol_expanded.shape[1])]
-            x.drop(columns=['protocol'], inplace=True)
-            x = pd.concat([x, protocol_expanded], axis=1)
+    if 'protocol' in x.columns:
+        protocol_expanded = pd.DataFrame(x['protocol'].tolist(), index=x.index)
+        protocol_expanded.columns = [f'protocol_{i}' for i in range(protocol_expanded.shape[1])]
+        x.drop(columns=['protocol'], inplace=True)
+        x = pd.concat([x, protocol_expanded], axis=1)
 
-        # Pour les applications
-        if 'application_name' in x.columns:
-            apps_expanded = pd.DataFrame(x['application_name'].tolist(), index=x.index)
-            apps_expanded.columns = [f'app_{i}' for i in range(apps_expanded.shape[1])]
-            x.drop(columns=['application_name'], inplace=True)
-            x = pd.concat([x, apps_expanded], axis=1)
+    if 'application_name' in x.columns:
+        apps_expanded = pd.DataFrame(x['application_name'].tolist(), index=x.index)
+        apps_expanded.columns = [f'app_{i}' for i in range(apps_expanded.shape[1])]
+        x.drop(columns=['application_name'], inplace=True)
+        x = pd.concat([x, apps_expanded], axis=1)
 
-        # Pour les IP source et destination
-        for ip_col in ['src_ip', 'dst_ip']:
-            if ip_col in x.columns:
-                ip_expanded = pd.DataFrame(x[ip_col].tolist(), index=x.index)
-                ip_expanded.columns = [f'{ip_col}_part_{i}' for i in range(ip_expanded.shape[1])]
-                x.drop(columns=[ip_col], inplace=True)
-                x = pd.concat([x, ip_expanded], axis=1)
+    for ip_col in ['src_ip', 'dst_ip']:
+        if ip_col in x.columns:
+            ip_expanded = pd.DataFrame(x[ip_col].tolist(), index=x.index)
+            ip_expanded.columns = [f'{ip_col}_part_{i}' for i in range(ip_expanded.shape[1])]
+            x.drop(columns=[ip_col], inplace=True)
+            x = pd.concat([x, ip_expanded], axis=1)
 
-        # Normalisation des features numériques
-        scaler = StandardScaler()
-        x[numeric_cols] = scaler.fit_transform(x[numeric_cols])
+    scaler = StandardScaler()
+    x[numeric_cols] = scaler.fit_transform(x[numeric_cols])
 
-        return x.values, y
+    return x.values, y
 
 def name_to_int(name: str) -> int:
     return cityhash.CityHash64(name)
