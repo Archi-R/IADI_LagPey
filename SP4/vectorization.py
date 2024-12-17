@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import cityhash
 
-def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, label_col='label'):
+def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, label_col='label', apps_list = None, protocol_list = None):
     """
     Transforme les flux en vecteurs de caractéristiques numériques.
 
@@ -23,8 +23,8 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
     if numeric_cols is None:
         numeric_cols = [
             'bidirectional_packets', 'bidirectional_bytes', 'fan_in', 'fan_out',
-            'bidirectional_duration_ms', 'bidirectional_mean_interarrival_time_ms',
-            'bidirectional_std_interarrival_time_ms'
+            'bidirectional_duration_ms', 'bidirectional_first_seen_ms',
+            'bidirectional_last_seen_ms'
         ]
 
     # Check if the required columns exist
@@ -37,9 +37,9 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
 
     for col in categorical_cols:
         if col == 'protocol':
-            x['protocol'] = x['protocol'].apply(protocol_one_hot_vector)
+            x['protocol'] = protocol_one_hot_vector(x['protocol'], protocol_list)
         elif col == 'application_name':
-            x['application_name'] = x['application_name'].apply(apps_one_hot_vector)
+            x['application_name'] = apps_one_hot_vector(x['application_name'], apps_list)
         elif col == 'src_ip' or col == 'dst_ip':
             x[col] = x[col].apply(ip_split)
 
@@ -70,16 +70,16 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
 def name_to_int(name: str) -> int:
     return cityhash.CityHash64(name)
 
-def protocol_one_hot_vector(protocol:int)->list[int]:
-    protocol_list = [1,2,6,17,58,-1]
+def protocol_one_hot_vector(protocol:int, protocol_list = None)->list[int]:
+    if protocol_list is None:protocol_list = [1, 2, 6, 17, 58, -1]
     if protocol not in protocol_list:
         print ("Unknown protocol")
         protocol = -1
     return [1 if i==protocol else 0 for i in protocol_list]
 
-def apps_one_hot_vector(app:str)->list[int]:
+def apps_one_hot_vector(app:str,apps_list = None)->list[int]:
     # TODO: Ajouter les applications manquantes
-    apps_list = ['TLS.Google','DNS','NetBIOS','NTP','TLS','LDAP','DNS.Microsoft','DNS.Google','HTTP','Unknown']
+    if apps_list is None : apps_list = ['TLS.Google','DNS','NetBIOS','NTP','TLS','LDAP','DNS.Microsoft','DNS.Google','HTTP','Unknown']
     if app not in apps_list:
         print ("Invalid application")
         return [0 for i in apps_list]

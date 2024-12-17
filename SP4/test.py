@@ -38,34 +38,34 @@ LIMIT = 1  # Limite pour le nombre de fichiers à traiter
 
 # Liste des pcap
 if __name__ == '__main__':
+    if(0):
+        pcap_files = [f for f in os.listdir(pcap_dir) if f.endswith(".pcap")]
 
-    pcap_files = [f for f in os.listdir(pcap_dir) if f.endswith(".pcap")]
+        print("1. Transformation des pcap en csv")
+        csv_files = []
+        i = 0
+        for pcap in pcap_files:
+            if i >= LIMIT: break
+            pcap_path = os.path.join(pcap_dir, pcap)
+            csv_path = pcap_to_csv(pcap_path)
+            # csv_path = "..\\pcap_folder\\dataset\\csv\\trace_a_1.csv.temp"
+            csv_path = csv_cleaner(csv_path)
+            i += 1
+        csv_files = [os.path.join(csv_dir, f) for f in os.listdir(csv_dir) if f.endswith(".csv")]
 
-    print("1. Transformation des pcap en csv")
-    csv_files = []
-    i = 0
-    for pcap in pcap_files:
-        if i >= LIMIT: break
-        pcap_path = os.path.join(pcap_dir, pcap)
-        csv_path = pcap_to_csv(pcap_path)
-        # csv_path = "..\\pcap_folder\\dataset\\csv\\trace_a_1.csv.temp"
-        csv_path = csv_cleaner(csv_path)
-        i += 1
-    csv_files = [os.path.join(csv_dir, f) for f in os.listdir(csv_dir) if f.endswith(".csv")]
+        print("2. Enrichissement avec fan_in/fan_out")
+        # On peut éventuellement concaténer tous les CSV en un seul avant fan_in/out
+        # Supposons qu'on fasse fan_in/out sur chaque CSV individuellement (adapter si besoin)
+        enriched_csv_files = []
+        for csv_file in csv_files:
+            enriched_csv = add_fan_features(csv_file, time_window=time_window)
+            enriched_csv_files.append(enriched_csv)
 
-    print("2. Enrichissement avec fan_in/fan_out")
-    # On peut éventuellement concaténer tous les CSV en un seul avant fan_in/out
-    # Supposons qu'on fasse fan_in/out sur chaque CSV individuellement (adapter si besoin)
-    enriched_csv_files = []
-    for csv_file in csv_files:
-        enriched_csv = add_fan_features(csv_file, time_window=time_window)
-        enriched_csv_files.append(enriched_csv)
+        print("2.5 Concaténer tous les CSV enrichis en un seul dataset global")
 
-    print("2.5 Concaténer tous les CSV enrichis en un seul dataset global")
-
-    all_data = pd.concat([pd.read_csv(f) for f in enriched_csv_files], ignore_index=True)
-    global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
-    all_data.to_csv(global_csv, index=False)
+        all_data = pd.concat([pd.read_csv(f) for f in enriched_csv_files], ignore_index=True)
+        global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
+        all_data.to_csv(global_csv, index=False)
 
     global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
 
@@ -79,11 +79,18 @@ if __name__ == '__main__':
     # bidirectional_first_seen_ms,bidirectional_last_seen_ms,bidirectional_duration_ms,bidirectional_packets,bidirectional_bytes,
     # src2dst_first_seen_ms,src2dst_last_seen_ms,src2dst_duration_ms,src2dst_packets,src2dst_bytes,dst2src_first_seen_ms,dst2src_last_seen_ms,dst2src_duration_ms,dst2src_packets,dst2src_bytes,bidirectional_min_ps,bidirectional_mean_ps,bidirectional_stddev_ps,bidirectional_max_ps,src2dst_min_ps,src2dst_mean_ps,src2dst_stddev_ps,src2dst_max_ps,dst2src_min_ps,dst2src_mean_ps,dst2src_stddev_ps,dst2src_max_ps,bidirectional_min_piat_ms,bidirectional_mean_piat_ms,bidirectional_stddev_piat_ms,bidirectional_max_piat_ms,src2dst_min_piat_ms,src2dst_mean_piat_ms,src2dst_stddev_piat_ms,src2dst_max_piat_ms,dst2src_min_piat_ms,dst2src_mean_piat_ms,dst2src_stddev_piat_ms,dst2src_max_piat_ms,bidirectional_syn_packets,bidirectional_cwr_packets,bidirectional_ece_packets,bidirectional_urg_packets,bidirectional_ack_packets,bidirectional_psh_packets,bidirectional_rst_packets,bidirectional_fin_packets,src2dst_syn_packets,src2dst_cwr_packets,src2dst_ece_packets,src2dst_urg_packets,src2dst_ack_packets,src2dst_psh_packets,src2dst_rst_packets,src2dst_fin_packets,dst2src_syn_packets,dst2src_cwr_packets,dst2src_ece_packets,dst2src_urg_packets,dst2src_ack_packets,dst2src_psh_packets,dst2src_rst_packets,dst2src_fin_packets,application_name,application_category_name,application_is_guessed,application_confidence,requested_server_name,client_fingerprint,server_fingerprint,user_agent,content_type,fan_out,fan_in,fan_out,fan_in
 
+    # Recuperer toutes la valeurs de protocol possibles
+    protocol_values = set(pd.read_csv(labeled_csv, dtype={'protocol': str})['protocol'].unique())
+
+    # Recuperer toutes la valeurs de application_name possibles
+    application_name_values = set(pd.read_csv(labeled_csv, dtype={'application_name': str})['application_name'].unique())
+
+
     categorical_cols = ['protocol', 'application_name', 'src_ip', 'dst_ip']
     numeric_cols = [
         'bidirectional_packets', 'bidirectional_bytes', 'fan_in', 'fan_out',
-        'bidirectional_duration_ms', 'bidirectional_mean_interarrival_time_ms',
-        'bidirectional_std_interarrival_time_ms'
+        'bidirectional_duration_ms', 'bidirectional_first_seen_ms',
+        'bidirectional_last_seen_ms'
     ]
 
     X, y = vectorize_flows(labeled_csv,
