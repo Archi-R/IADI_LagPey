@@ -75,14 +75,13 @@ if __name__ == '__main__':
     labeled_csv = "..\\pcap_folder\\dataset\\csv\\all_data_with_fan_labeled_fix10000.csv"
 
     print("4.Préparation pour la cross-validation ")
-    # Note: cette fonction nécessite un CSV. On va donc réécrire X,y dans un CSV temporaire si besoin.
-    final_df = pd.DataFrame(X)
-    final_df['label'] = y
-    #final_dataset_csv = os.path.join(pcap_dir, "final_dataset.csv")
-    final_df.to_csv(labeled_csv, index=False)
+    # final_df = pd.DataFrame(X)
+    # final_df['label'] = y
+    # #final_dataset_csv = os.path.join(pcap_dir, "final_dataset.csv")
+    # final_df.to_csv(labeled_csv, index=False)
 
     X_train, y_train, X_test, y_test, fold_indices = prepare_cross_validation_data(labeled_csv,
-                                                                                   apps_list=application_name_values,
+                                                                                   apps_list=["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"],
                                                                                    label_col='label')
 
     print("Préparation terminée.")
@@ -116,10 +115,19 @@ if __name__ == '__main__':
         'bidirectional_last_seen_ms'
     ]
 
-    X, y = vectorize_flows(labeled_csv
+    # TODO : voir ce qon fait de ça :
+    df_train = X_train.copy()
+    df_train[label_col] = y_train
+
+    df_test = X_test.copy()
+    df_test[label_col] = y_test
+
+    # TODO refactoriser vectorize_flows pour qu'il prenne en entrée un DataFrame, ou (x, y,...)
+    X, y = vectorize_flows( df_test
                            , categorical_cols=categorical_cols
                            , numeric_cols=numeric_cols
                            , label_col='label'
                            , apps_list=application_name_values
                            , protocol_list=protocol_values
                            )
+

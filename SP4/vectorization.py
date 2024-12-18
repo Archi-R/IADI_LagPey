@@ -2,21 +2,10 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import cityhash
 
-def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, label_col='label', apps_list = None, protocol_list = None):
+def vectorize_flows(df, categorical_cols=None, numeric_cols=None, label_col='label', apps_list=None, protocol_list=None):
     """
-    Transforme les flux en vecteurs de caractéristiques numériques.
-
-    Args :
-        csv_path (str) : Chemin vers le CSV labellisé.
-        categorical_cols (list) : Liste des colonnes catégorielles à encoder.
-        numeric_cols (list) : Liste des colonnes numériques à normaliser.
-        label_col (str) : Nom de la colonne des étiquettes.
-
-    Returns :
-        X, y : Matrices (ou DataFrame/array) de features et vecteur des labels.
+    Transforme les flux en vecteurs de caractéristiques numériques à partir d'un DataFrame directement.
     """
-    df = pd.read_csv(csv_path, low_memory=False)
-
     if categorical_cols is None:
         categorical_cols = ['protocol', 'application_name']
 
@@ -37,12 +26,10 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
 
     for col in categorical_cols:
         if col == 'protocol':
-            # x['protocol'] = protocol_one_hot_vector(x['protocol'], protocol_list)
             x['protocol'] = x['protocol'].apply(generic_one_hottizator, possible_values_set=protocol_list)
         elif col == 'application_name':
-            # x['application_name'] = apps_one_hot_vector(x['application_name'], apps_list)
             x['application_name'] = x['application_name'].apply(generic_one_hottizator, possible_values_set=apps_list)
-        elif col == 'src_ip' or col == 'dst_ip':
+        elif col in ['src_ip', 'dst_ip']:
             x[col] = x[col].apply(ip_split)
 
     if 'protocol' in x.columns:
@@ -68,6 +55,7 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
     x[numeric_cols] = scaler.fit_transform(x[numeric_cols])
 
     return x.values, y
+
 
 def name_to_int(name: str) -> int:
     return cityhash.CityHash64(name)
