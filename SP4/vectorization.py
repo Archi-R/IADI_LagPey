@@ -37,9 +37,11 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
 
     for col in categorical_cols:
         if col == 'protocol':
-            x['protocol'] = protocol_one_hot_vector(x['protocol'], protocol_list)
+            # x['protocol'] = protocol_one_hot_vector(x['protocol'], protocol_list)
+            x['protocol'] = x['protocol'].apply(generic_one_hottizator, possible_values_set=protocol_list)
         elif col == 'application_name':
-            x['application_name'] = apps_one_hot_vector(x['application_name'], apps_list)
+            # x['application_name'] = apps_one_hot_vector(x['application_name'], apps_list)
+            x['application_name'] = x['application_name'].apply(generic_one_hottizator, possible_values_set=apps_list)
         elif col == 'src_ip' or col == 'dst_ip':
             x[col] = x[col].apply(ip_split)
 
@@ -70,23 +72,33 @@ def vectorize_flows(csv_path: str, categorical_cols=None, numeric_cols=None, lab
 def name_to_int(name: str) -> int:
     return cityhash.CityHash64(name)
 
-def protocol_one_hot_vector(protocol:int, protocol_list = None)->list[int]:
-    if protocol_list is None:protocol_list = [1, 2, 6, 17, 58, -1]
-    if protocol not in protocol_list:
-        print ("Unknown protocol")
-        protocol = -1
-    return [1 if i==protocol else 0 for i in protocol_list]
+# def protocol_one_hot_vector(protocol:int, protocol_list = None)->list[int]:
+#     if protocol_list is None:protocol_list = [1, 2, 6, 17, 58, -1]
+#     if protocol not in protocol_list:
+#         print ("Unknown protocol")
+#         protocol = -1
+#     return [1 if i==protocol else 0 for i in protocol_list]
+#
+# def apps_one_hot_vector(app:str,apps_list = None)->list[int]:
+#     # TODO: Ajouter les applications manquantes
+#     if apps_list is None : apps_list = ['TLS.Google','DNS','NetBIOS','NTP','TLS','LDAP','DNS.Microsoft','DNS.Google','HTTP','Unknown']
+#     if app not in apps_list:
+#         print ("Invalid application")
+#         return [0 for i in apps_list]
+#     return [1 if i==app else 0 for i in apps_list]
 
-def apps_one_hot_vector(app:str,apps_list = None)->list[int]:
-    # TODO: Ajouter les applications manquantes
-    if apps_list is None : apps_list = ['TLS.Google','DNS','NetBIOS','NTP','TLS','LDAP','DNS.Microsoft','DNS.Google','HTTP','Unknown']
-    if app not in apps_list:
-        print ("Invalid application")
-        return [0 for i in apps_list]
-    return [1 if i==app else 0 for i in apps_list]
+def generic_one_hottizator(value:str, possible_values_set :set)->list[int]:
+    value = str(value)
+    if value not in possible_values_set:
+        raise ValueError(f"Valeur inconnue : {value}")
+    return [1 if i==value else 0 for i in possible_values_set]
 
 def ip_split(ip:str)->list[int]:
-    return [int(i) for i in ip.split('.')]
+    try:
+        return [int(i) for i in ip.split('.')]
+    except:
+        return [0,0,0,0]
+
 
 
 def flow_to_vector(flow:dict)->list[int]:
@@ -101,8 +113,10 @@ def flow_to_vector(flow:dict)->list[int]:
             vectorized_flow.append(0)
 
     # Ajout des index categoriels
-    vectorized_flow.append(protocol_one_hot_vector(flow['protocol']))
-    vectorized_flow.append(apps_one_hot_vector(flow['application_name']))
+    #vectorized_flow.append(protocol_one_hot_vector(flow['protocol']))
+    vectorized_flow.append(generic_one_hottizator(flow['protocol'], []))
+    #vectorized_flow.append(apps_one_hot_vector(flow['application_name']))
+    vectorized_flow.append(generic_one_hottizator(flow['application_name'], []))
     vectorized_flow.append(ip_split(flow['src_ip']))
     vectorized_flow.append(ip_split(flow['dst_ip']))
 

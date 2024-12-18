@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split, StratifiedKFold
 
 
-def prepare_cross_validation_data(csv_path: str, apps_list=None, label_col='label'):
+def prepare_cross_validation_data(csv_path: str, apps_list, label_col='label'):
     """
     Prépare les données pour la cross-validation selon la Q3.
     - Filtre par nom d'application
@@ -11,8 +11,6 @@ def prepare_cross_validation_data(csv_path: str, apps_list=None, label_col='labe
     - Concatène tous les sets de train pour un X_train, y_train global
     - Met en place une stratified 5-fold cross-validation sur le train global
     """
-    if apps_list is None:
-        apps_list = ["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"]
 
     df = pd.read_csv(csv_path)
     # Assure-toi que la colonne application_name et le label_col existent

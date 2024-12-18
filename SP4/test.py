@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from pandas.core.dtypes.cast import ensure_dtype_can_hold_na
 
+from tools import *
 from SP4.pcapLoader import *
 from SP4.labeling import *
 from SP4.vectorization import *
@@ -67,12 +68,35 @@ if __name__ == '__main__':
         global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
         all_data.to_csv(global_csv, index=False)
 
-    global_csv = os.path.join(csv_dir,"all_data_with_fan.csv")
 
-    print("3. Labeling des flux avec TRAIN.gt")
-    labeled_csv = label_flows(global_csv, train_gt_path)
+        print("3. Labeling des flux avec TRAIN.gt")
+        labeled_csv = label_flows(global_csv, train_gt_path)
 
-    print("4. Vectorisation")
+    labeled_csv = "..\\pcap_folder\\dataset\\csv\\all_data_with_fan_labeled_fix10000.csv"
+
+    print("4.Préparation pour la cross-validation ")
+    # Note: cette fonction nécessite un CSV. On va donc réécrire X,y dans un CSV temporaire si besoin.
+    final_df = pd.DataFrame(X)
+    final_df['label'] = y
+    #final_dataset_csv = os.path.join(pcap_dir, "final_dataset.csv")
+    final_df.to_csv(labeled_csv, index=False)
+
+    X_train, y_train, X_test, y_test, fold_indices = prepare_cross_validation_data(labeled_csv,
+                                                                                   apps_list=application_name_values,
+                                                                                   label_col='label')
+
+    print("Préparation terminée.")
+    print("X_train shape:", X_train.shape)
+    print("y_train shape:", y_train.shape)
+    print("X_test shape:", X_test.shape)
+    print("y_test shape:", y_test.shape)
+    print("Fold indices:", fold_indices)
+
+    print("5. Vectorisation")
+
+
+
+
     # Ici, tu dois avoir déjà défini protocol_one_hot_vector, apps_one_hot_vector, ip_split,
     # id,expiration_id,src_ip,src_mac,src_oui,src_port,dst_ip,dst_mac,dst_oui,dst_port,
     # protocol,ip_version,vlan_id,tunnel_id,
@@ -80,11 +104,10 @@ if __name__ == '__main__':
     # src2dst_first_seen_ms,src2dst_last_seen_ms,src2dst_duration_ms,src2dst_packets,src2dst_bytes,dst2src_first_seen_ms,dst2src_last_seen_ms,dst2src_duration_ms,dst2src_packets,dst2src_bytes,bidirectional_min_ps,bidirectional_mean_ps,bidirectional_stddev_ps,bidirectional_max_ps,src2dst_min_ps,src2dst_mean_ps,src2dst_stddev_ps,src2dst_max_ps,dst2src_min_ps,dst2src_mean_ps,dst2src_stddev_ps,dst2src_max_ps,bidirectional_min_piat_ms,bidirectional_mean_piat_ms,bidirectional_stddev_piat_ms,bidirectional_max_piat_ms,src2dst_min_piat_ms,src2dst_mean_piat_ms,src2dst_stddev_piat_ms,src2dst_max_piat_ms,dst2src_min_piat_ms,dst2src_mean_piat_ms,dst2src_stddev_piat_ms,dst2src_max_piat_ms,bidirectional_syn_packets,bidirectional_cwr_packets,bidirectional_ece_packets,bidirectional_urg_packets,bidirectional_ack_packets,bidirectional_psh_packets,bidirectional_rst_packets,bidirectional_fin_packets,src2dst_syn_packets,src2dst_cwr_packets,src2dst_ece_packets,src2dst_urg_packets,src2dst_ack_packets,src2dst_psh_packets,src2dst_rst_packets,src2dst_fin_packets,dst2src_syn_packets,dst2src_cwr_packets,dst2src_ece_packets,dst2src_urg_packets,dst2src_ack_packets,dst2src_psh_packets,dst2src_rst_packets,dst2src_fin_packets,application_name,application_category_name,application_is_guessed,application_confidence,requested_server_name,client_fingerprint,server_fingerprint,user_agent,content_type,fan_out,fan_in,fan_out,fan_in
 
     # Recuperer toutes la valeurs de protocol possibles
-    protocol_values = set(pd.read_csv(labeled_csv, dtype={'protocol': str})['protocol'].unique())
+    protocol_values = valeurs_uniques(labeled_csv, 'protocol')
 
     # Recuperer toutes la valeurs de application_name possibles
-    application_name_values = set(pd.read_csv(labeled_csv, dtype={'application_name': str})['application_name'].unique())
-
+    application_name_values = valeurs_uniques(labeled_csv, 'application_name')
 
     categorical_cols = ['protocol', 'application_name', 'src_ip', 'dst_ip']
     numeric_cols = [
@@ -93,25 +116,10 @@ if __name__ == '__main__':
         'bidirectional_last_seen_ms'
     ]
 
-    X, y = vectorize_flows(labeled_csv,
-                           categorical_cols=categorical_cols,
-                           numeric_cols=numeric_cols,
-                           label_col='label')
-
-    print("5. Préparation pour la cross-validation")
-    # Note: cette fonction nécessite un CSV. On va donc réécrire X,y dans un CSV temporaire si besoin.
-    final_df = pd.DataFrame(X)
-    final_df['label'] = y
-    final_dataset_csv = os.path.join(pcap_dir,"final_dataset.csv")
-    final_df.to_csv(final_dataset_csv, index=False)
-
-    X_train, y_train, X_test, y_test, fold_indices = prepare_cross_validation_data(final_dataset_csv,
-                                                                                  apps_list=["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"],
-                                                                                  label_col='label')
-
-    print("Préparation terminée.")
-    print("X_train shape:", X_train.shape)
-    print("y_train shape:", y_train.shape)
-    print("X_test shape:", X_test.shape)
-    print("y_test shape:", y_test.shape)
-    print("Fold indices:", fold_indices)
+    X, y = vectorize_flows(labeled_csv
+                           , categorical_cols=categorical_cols
+                           , numeric_cols=numeric_cols
+                           , label_col='label'
+                           , apps_list=application_name_values
+                           , protocol_list=protocol_values
+                           )
