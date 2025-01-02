@@ -8,7 +8,7 @@ from SP4.labeling import *
 from SP4.vectorization import *
 from labeling import label_flows
 from vectorization import vectorize_flows
-from cross_validation_setup import prepare_cross_validation_data
+from cross_validation_setup import train
 
 
 # pcap_folder = "../pcap_folder/dataset"
@@ -32,7 +32,7 @@ from cross_validation_setup import prepare_cross_validation_data
 # Variables à ajuster
 pcap_dir = "..\\pcap_folder\\dataset\\pcap"
 csv_dir = "..\\pcap_folder\\dataset\\csv"
-train_gt_path = "..\\pcap_folder\\dataset\\TRAIN.gt"
+train_gt_path = "../pcap_folder/dataset/TRAIN.gt.csv"
 time_window = 60  # pour fan_in/fan_out
 
 LIMIT = 1  # Limite pour le nombre de fichiers à traiter
@@ -69,65 +69,56 @@ if __name__ == '__main__':
         all_data.to_csv(global_csv, index=False)
 
 
-        print("3. Labeling des flux avec TRAIN.gt")
+        print("3. Labeling des flux avec TRAIN.gt.csv")
         labeled_csv = label_flows(global_csv, train_gt_path)
 
     labeled_csv = "..\\pcap_folder\\dataset\\csv\\all_data_with_fan_labeled_fix10000.csv"
 
-    print("4.Préparation pour la cross-validation ")
-    # final_df = pd.DataFrame(X)
-    # final_df['label'] = y
-    # #final_dataset_csv = os.path.join(pcap_dir, "final_dataset.csv")
-    # final_df.to_csv(labeled_csv, index=False)
+    # loading the labeled csv
+    df = pd.read_csv(labeled_csv)
 
-    X_train, y_train, X_test, y_test, fold_indices = prepare_cross_validation_data(labeled_csv,
-                                                                                   apps_list=["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"],
-                                                                                   label_col='label')
+    print("4. Séparation en sous-ensembles")
+    apps_sous_ensembles = ["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"]
 
-    print("Préparation terminée.")
-    print("X_train shape:", X_train.shape)
-    print("y_train shape:", y_train.shape)
-    print("X_test shape:", X_test.shape)
-    print("y_test shape:", y_test.shape)
-    print("Fold indices:", fold_indices)
+    dict_sub_df = subset_divizor(df, apps_sous_ensembles, 'application_name')
 
-    print("5. Vectorisation")
-
-
-
-
-    # Ici, tu dois avoir déjà défini protocol_one_hot_vector, apps_one_hot_vector, ip_split,
-    # id,expiration_id,src_ip,src_mac,src_oui,src_port,dst_ip,dst_mac,dst_oui,dst_port,
-    # protocol,ip_version,vlan_id,tunnel_id,
-    # bidirectional_first_seen_ms,bidirectional_last_seen_ms,bidirectional_duration_ms,bidirectional_packets,bidirectional_bytes,
-    # src2dst_first_seen_ms,src2dst_last_seen_ms,src2dst_duration_ms,src2dst_packets,src2dst_bytes,dst2src_first_seen_ms,dst2src_last_seen_ms,dst2src_duration_ms,dst2src_packets,dst2src_bytes,bidirectional_min_ps,bidirectional_mean_ps,bidirectional_stddev_ps,bidirectional_max_ps,src2dst_min_ps,src2dst_mean_ps,src2dst_stddev_ps,src2dst_max_ps,dst2src_min_ps,dst2src_mean_ps,dst2src_stddev_ps,dst2src_max_ps,bidirectional_min_piat_ms,bidirectional_mean_piat_ms,bidirectional_stddev_piat_ms,bidirectional_max_piat_ms,src2dst_min_piat_ms,src2dst_mean_piat_ms,src2dst_stddev_piat_ms,src2dst_max_piat_ms,dst2src_min_piat_ms,dst2src_mean_piat_ms,dst2src_stddev_piat_ms,dst2src_max_piat_ms,bidirectional_syn_packets,bidirectional_cwr_packets,bidirectional_ece_packets,bidirectional_urg_packets,bidirectional_ack_packets,bidirectional_psh_packets,bidirectional_rst_packets,bidirectional_fin_packets,src2dst_syn_packets,src2dst_cwr_packets,src2dst_ece_packets,src2dst_urg_packets,src2dst_ack_packets,src2dst_psh_packets,src2dst_rst_packets,src2dst_fin_packets,dst2src_syn_packets,dst2src_cwr_packets,dst2src_ece_packets,dst2src_urg_packets,dst2src_ack_packets,dst2src_psh_packets,dst2src_rst_packets,dst2src_fin_packets,application_name,application_category_name,application_is_guessed,application_confidence,requested_server_name,client_fingerprint,server_fingerprint,user_agent,content_type,fan_out,fan_in,fan_out,fan_in
-
-    # Recuperer toutes la valeurs de protocol possibles
-    protocol_values = valeurs_uniques(labeled_csv, 'protocol')
-
-    # Recuperer toutes la valeurs de application_name possibles
-    application_name_values = valeurs_uniques(labeled_csv, 'application_name')
-
-    categorical_cols = ['protocol', 'application_name', 'src_ip', 'dst_ip']
+    print("5. Vectorisation des flux")
+    categorical_cols = ['protocol', 'src_ip', 'dst_ip']
     numeric_cols = [
         'bidirectional_packets', 'bidirectional_bytes', 'fan_in', 'fan_out',
-        'bidirectional_duration_ms', 'bidirectional_first_seen_ms',
-        'bidirectional_last_seen_ms'
+        'bidirectional_duration_ms',
+        'src_port', 'dst_port'
+        #'src_to_dst_packets', 'src_to_dst_bytes', 'dst_to_src_packets', 'dst_to_src_bytes',
+        #'src_to_dst_duration_ms', 'dst_to_src_duration_ms',
+        # put other shits
+
     ]
 
-    # TODO : voir ce qon fait de ça :
-    df_train = X_train.copy()
-    df_train[label_col] = y_train
+    protocol_values = valeurs_uniques(labeled_csv, 'protocol')
 
-    df_test = X_test.copy()
-    df_test[label_col] = y_test
+    for app_name in dict_sub_df:
+        print(f"5[{app_name}] Vectorisation du sous-ensemble")
+        vectorized_df = vectorize_flows(dict_sub_df[app_name]
+                                        , categorical_cols=categorical_cols
+                                        , numeric_cols=numeric_cols
+                                        , label_col='label'
+                                        , protocol_list=protocol_values
+                                        )
 
-    # TODO refactoriser vectorize_flows pour qu'il prenne en entrée un DataFrame, ou (x, y,...)
-    X, y = vectorize_flows( df_test
-                           , categorical_cols=categorical_cols
-                           , numeric_cols=numeric_cols
-                           , label_col='label'
-                           , apps_list=application_name_values
-                           , protocol_list=protocol_values
-                           )
+        # dict_sub_vectorized_df[app_name] = vectorized_df # ne sert pas à grand chose
 
+        vectorized_csv_path = os.path.join(pcap_dir, f"vectorized_labeled_dataset_{app_name}.csv")
+        vectorized_df.to_csv(vectorized_csv_path, index=False)
+
+        print(f"6[{app_name}] Entrainement et évaluation")
+
+        train(vectorized_df, label_col='label')
+
+    print("Préparation terminée.")
+        # print("X_train shape:", X_train.shape)
+        # print("y_train shape:", y_train.shape)
+        # print("X_test shape:", X_test.shape)
+        # print("y_test shape:", y_test.shape)
+        # print("Fold indices:", fold_indices)
+
+    print("Fin du traitement.")

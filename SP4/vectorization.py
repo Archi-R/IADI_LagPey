@@ -1,20 +1,16 @@
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-import cityhash
 
 def vectorize_flows(df, categorical_cols=None, numeric_cols=None, label_col='label', apps_list=None, protocol_list=None):
     """
     Transforme les flux en vecteurs de caractéristiques numériques à partir d'un DataFrame directement.
+    :return DataFrame: Les données transformées
     """
     if categorical_cols is None:
-        categorical_cols = ['protocol', 'application_name']
+        raise ValueError("Categorical columns must be specified")
 
     if numeric_cols is None:
-        numeric_cols = [
-            'bidirectional_packets', 'bidirectional_bytes', 'fan_in', 'fan_out',
-            'bidirectional_duration_ms', 'bidirectional_first_seen_ms',
-            'bidirectional_last_seen_ms'
-        ]
+        raise ValueError("Numeric columns must be specified")
 
     # Check if the required columns exist
     missing_cols = [col for col in numeric_cols if col not in df.columns]
@@ -27,8 +23,8 @@ def vectorize_flows(df, categorical_cols=None, numeric_cols=None, label_col='lab
     for col in categorical_cols:
         if col == 'protocol':
             x['protocol'] = x['protocol'].apply(generic_one_hottizator, possible_values_set=protocol_list)
-        elif col == 'application_name':
-            x['application_name'] = x['application_name'].apply(generic_one_hottizator, possible_values_set=apps_list)
+        # elif col == 'application_name':
+        #     x['application_name'] = x['application_name'].apply(generic_one_hottizator, possible_values_set=apps_list)
         elif col in ['src_ip', 'dst_ip']:
             x[col] = x[col].apply(ip_split)
 
@@ -38,11 +34,11 @@ def vectorize_flows(df, categorical_cols=None, numeric_cols=None, label_col='lab
         x.drop(columns=['protocol'], inplace=True)
         x = pd.concat([x, protocol_expanded], axis=1)
 
-    if 'application_name' in x.columns:
-        apps_expanded = pd.DataFrame(x['application_name'].tolist(), index=x.index)
-        apps_expanded.columns = [f'app_{i}' for i in range(apps_expanded.shape[1])]
-        x.drop(columns=['application_name'], inplace=True)
-        x = pd.concat([x, apps_expanded], axis=1)
+    # if 'application_name' in x.columns:
+    #     apps_expanded = pd.DataFrame(x['application_name'].tolist(), index=x.index)
+    #     apps_expanded.columns = [f'app_{i}' for i in range(apps_expanded.shape[1])]
+    #     x.drop(columns=['application_name'], inplace=True)
+    #     x = pd.concat([x, apps_expanded], axis=1)
 
     for ip_col in ['src_ip', 'dst_ip']:
         if ip_col in x.columns:
@@ -54,11 +50,10 @@ def vectorize_flows(df, categorical_cols=None, numeric_cols=None, label_col='lab
     scaler = StandardScaler()
     x[numeric_cols] = scaler.fit_transform(x[numeric_cols])
 
-    return x.values, y
+    # regrouper x et y en df
+    x['label'] = y
+    return x
 
-
-def name_to_int(name: str) -> int:
-    return cityhash.CityHash64(name)
 
 # def protocol_one_hot_vector(protocol:int, protocol_list = None)->list[int]:
 #     if protocol_list is None:protocol_list = [1, 2, 6, 17, 58, -1]

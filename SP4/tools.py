@@ -103,3 +103,17 @@ def fix_ligne10000(csv_path: str)->str:
     return new_csv_path
 
 # fix_ligne10000("C:\\Projets_GIT_C\\ENSIBS\\ia_detection\\IADI_LagPey\\pcap_folder\\dataset\\csv\\all_data_with_fan_labeled.csv")
+
+def subset_divizor(df, list_of_values, field):
+    """
+    Divise un dataframe en sous-dataframes selon les valeurs d'un champ
+    :param df:
+    :param list_of_values:
+    :param field:
+    :return:
+    """
+    dict_apps = {}
+    for app in list_of_values:
+        dict_apps[app] = df[(df[field] == app) | (df[field].str.contains(app))]
+
+    return dict_apps

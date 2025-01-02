@@ -36,6 +36,16 @@ def label_flows(csv_path: str, gt_path: str) -> str:
         data = list(reader)
 
     gt_data = load_ground_truth(gt_path)
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
+    # TODO ;  TOUT REFAIRE
 
     # Création d'un index par 5-tuple pour accélérer la recherche
     # Clé : (src_ip, dst_ip, src_port, dst_port, protocol)
