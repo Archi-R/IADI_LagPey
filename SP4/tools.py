@@ -1,5 +1,7 @@
-from pcapLoader import csv_to_reader
 
+
+from pcapLoader import csv_to_reader
+import pandas as pd
 ########### tool temporaire
 def quels_champs_sont_constants(csv_path: str)->dict:
     # on charge le fichier
@@ -51,16 +53,39 @@ def quels_champs_sont_constants(csv_path: str)->dict:
 
 # quels_champs_sont_constants("C:\\Projets_GIT_C\\ENSIBS\\ia_detection\\IADI_LagPey\\pcap_folder\\dataset\\csv\\trace_a_10.csv")
 
-def valeurs_uniques(csv_path: str, field:str)->set:
-    # on charge le fichier
-    reader = csv_to_reader(csv_path)
-    values = set()
-    # on parcourt les lignes
-    for row in reader:
-        # on parcourt les champs
-            values.add(row[field])
+def valeurs_uniques(csv_path: str, cols_to_look: list, unique_values: dict[str, set]) -> dict[str, set]:
+    """
+    Ajoute au dictionnaire d'entrée toutes les nouvelles valeurs uniques trouvées dans les colonnes spécifiées.
 
-    return values
+    Args:
+        csv_path (str): Chemin vers le fichier CSV à analyser.
+        cols_to_look (list): Liste des colonnes à examiner.
+        unique_values (dict[str, set]): Dictionnaire contenant les ensembles de valeurs uniques déjà collectées.
+
+    Returns:
+        dict[str, set]: Dictionnaire mis à jour avec les nouvelles valeurs uniques trouvées.
+    """
+    # Charger le fichier CSV
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        raise ValueError(f"Erreur lors du chargement du fichier CSV : {e}")
+
+    # Initialiser les clés manquantes dans le dictionnaire
+    for col in cols_to_look:
+        if col not in unique_values:
+            unique_values[col] = set()
+
+    # Parcourir les colonnes spécifiées et mettre à jour les ensembles
+    for col in cols_to_look:
+        if col in df.columns:
+            new_values = set(df[col].dropna().unique())  # Éliminer les doublons et les valeurs NaN
+            unique_values[col].update(new_values)
+        else:
+            print(f"Attention : la colonne '{col}' n'existe pas dans le fichier {csv_path}.")
+
+    return unique_values
+
 
 
 def fix_ligne10000(csv_path: str)->str:
@@ -110,10 +135,21 @@ def subset_divizor(df, list_of_values, field):
     :param df:
     :param list_of_values:
     :param field:
-    :return:
+    :return: dict de sous-dataframes
     """
     dict_apps = {}
     for app in list_of_values:
         dict_apps[app] = df[(df[field] == app) | (df[field].str.contains(app))]
 
     return dict_apps
+
+
+def json_set_int_encoder(obj):
+    from numpy import int64
+
+    if isinstance(obj, set):
+        return list(obj)
+    elif isinstance(obj, int64):
+        return int(obj)
+    else:
+        return obj

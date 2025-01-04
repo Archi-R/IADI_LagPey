@@ -1,12 +1,13 @@
 import nfstream
 import csv
 import os
+import pandas as pd
 ############
-def pcap_to_csv(pcap_path:str):
+def pcap_to_csv(pcap_path:str, dest_folder:str, cleaning=False)->str:
     # read pcap file with nfstream
     # and write the flows to a CSV file
     # id,expiration_id,src_ip,src_mac,src_oui,src_port,dst_ip,dst_mac,dst_oui,dst_port,protocol,ip_version,vlan_id,tunnel_id,bidirectional_first_seen_ms,bidirectional_last_seen_ms,bidirectional_duration_ms,bidirectional_packets,bidirectional_bytes,src2dst_first_seen_ms,src2dst_last_seen_ms,src2dst_duration_ms,src2dst_packets,src2dst_bytes,dst2src_first_seen_ms,dst2src_last_seen_ms,dst2src_duration_ms,dst2src_packets,dst2src_bytes,application_name,application_category_name,application_is_guessed,application_confidence,requested_server_name,client_fingerprint,server_fingerprint,user_agent,content_type
-    csv_name = pcap_path.replace("\\pcap\\","\\csv\\").replace(".pcap", ".csv.temp")
+    csv_name = os.path.join(dest_folder, os.path.basename(pcap_path).replace(".pcap", ".csv.temp"))
     nfstream.NFStreamer(
         source=pcap_path,
         decode_tunnels=True,
@@ -14,6 +15,11 @@ def pcap_to_csv(pcap_path:str):
         active_timeout=120,
         statistical_analysis=True
     ).to_csv(csv_name)
+    if cleaning:
+        csv_name = csv_cleaner(csv_name)
+    else:
+        csv_name = csv_name.replace(".temp", "")
+    # suppression du fichier temporaire
     return csv_name
 
 
@@ -97,12 +103,11 @@ def get_values(reader: list, key: str)->list:
     return values
 
 
-def add_fan_features(csv_path: str, time_window: int = 60) -> str:
+
+
+def add_fan_features(csv_path: str, destination,time_window: int = 60) -> str:
     """
     Ajoute les colonnes fan-in et fan-out à un fichier CSV existant.
-
-    Pour chaque ligne, parcourt les lignes environnantes dans une fenêtre de temps T,
-    et compte les adresses IP distinctes pour calculer fan-in et fan-out.
 
     Args :
         csv_path (str): Chemin vers le fichier CSV existant.
@@ -111,49 +116,41 @@ def add_fan_features(csv_path: str, time_window: int = 60) -> str:
     Returns :
         str : Chemin vers le fichier enrichi avec fan-in et fan-out.
     """
-    output_csv = csv_path.replace(".csv", "_with_fan.csv")
-    reader = csv_to_reader(csv_path)  # Charge le fichier CSV comme une liste de dictionnaires
+    output_csv = os.path.join(destination, os.path.basename(csv_path))
+
+    # Charger le fichier CSV en DataFrame
+    df = pd.read_csv(csv_path)
 
     # Convertir le temps de la fenêtre en millisecondes
     time_window_ms = time_window * 1000
 
-    # Parcourir chaque ligne pour calculer fan-in et fan-out
-    for i, current_row in enumerate(reader):
-        src_ip = current_row['src_ip']
-        dst_ip = current_row['dst_ip']
-        current_time = int(current_row['bidirectional_first_seen_ms'])
+    # Trier les données par temps pour faciliter le traitement
+    df = df.sort_values(by='bidirectional_first_seen_ms')
 
-        fan_out_set = set()  # Stocke les IP cibles distinctes pour src_ip
-        fan_in_set = set()  # Stocke les IP sources distinctes pour dst_ip
+    # Créer des colonnes pour fan-out et fan-in
+    df['fan_out'] = 0
+    df['fan_in'] = 0
 
-        # Parcourir les lignes environnantes dans la fenêtre temporelle
-        j =0
-        for neighbor_row in reader:
-            j = j+1
-            if neighbor_row['bidirectional_first_seen_ms'] is None:
-                print(j)
-            neighbor_time = int(neighbor_row['bidirectional_first_seen_ms'])
+    # Fenêtre glissante pour calculer les métriques
+    for idx, row in df.iterrows():
+        current_time = row['bidirectional_first_seen_ms']
+        src_ip = row['src_ip']
+        dst_ip = row['dst_ip']
 
-            # Vérifie si la ligne est dans la fenêtre temporelle
-            if abs(current_time - neighbor_time) <= time_window_ms:
-                # Ajoute les adresses IP correspondantes
-                if neighbor_row['src_ip'] == src_ip:
-                    fan_out_set.add(neighbor_row['dst_ip'])
-                if neighbor_row['dst_ip'] == dst_ip:
-                    fan_in_set.add(neighbor_row['src_ip'])
+        # Filtrer les lignes dans la fenêtre temporelle
+        time_window_df = df[
+            (df['bidirectional_first_seen_ms'] >= current_time - time_window_ms) &
+            (df['bidirectional_first_seen_ms'] <= current_time + time_window_ms)
+        ]
 
-        # Calcul des tailles des ensembles (nombre d'adresses distinctes)
-        current_row['fan_out'] = len(fan_out_set)
-        current_row['fan_in'] = len(fan_in_set)
+        # Calculer fan-out et fan-in
+        fan_out_set = time_window_df[time_window_df['src_ip'] == src_ip]['dst_ip'].unique()
+        fan_in_set = time_window_df[time_window_df['dst_ip'] == dst_ip]['src_ip'].unique()
 
-    # Écriture du fichier CSV enrichi
-    try:
-        with open(output_csv, 'w+', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=list(reader[0].keys()) + ['fan_out', 'fan_in'])
-            writer.writeheader()
-            writer.writerows(reader)
-        print(f"Fichier enrichi avec fan-in et fan-out : {output_csv}")
-    except Exception as e:
-        print(f"Une erreur s'est produite lors de l'écriture du CSV : {e}")
+        df.at[idx, 'fan_out'] = len(fan_out_set)
+        df.at[idx, 'fan_in'] = len(fan_in_set)
+
+    # Sauvegarder le fichier enrichi
+    df.to_csv(output_csv, index=False)
 
     return output_csv

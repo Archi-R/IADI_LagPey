@@ -1,14 +1,21 @@
 import csv
+import os
 
-def load_ground_truth(gt_path: str)->list[dict]:
+import pandas as pd
+
+def load_ground_truth(gt_path: str)->tuple[list[dict], set[str], set[str]]:
     """
     Charge la ground truth dans une structure
     Format attendu: first_timestamp, last_timestamp, ip_src, ip_dst, port_src, port_dst, protocol
     :param gt_path:
-    :return: list[dict]
+    :return: list[dict] : la gt
+    set[str] : les ip sources
+    set[str] : les ip destinations
     """
 
     gt_data = []
+    ip_sources = set()
+    ip_destinations = set()
     with open(gt_path, 'r', newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f, delimiter=',')
         for row in reader:
@@ -21,62 +28,54 @@ def load_ground_truth(gt_path: str)->list[dict]:
                 'dst_port': row['dst_port'],
                 'protocol': row['protocol']
             })
-    return gt_data
+            ip_sources.add(row['src_ip'])
+            ip_destinations.add(row['dst_ip'])
+    return gt_data, ip_sources, ip_destinations
 
-def label_flows(csv_path: str, gt_path: str) -> str:
+def label_flows(csv_path: str, destination: str, gt_path: str) -> str:
     """
-    Ajoute une colonne 'label' aux flows en fonction de la ground truth.
-    Label = 1 si le flux recoupe un flux GT (même 5-tuple et plage temps qui se chevauchent), sinon 0.
-    1 = attaque, 0 = normal
-    """
-    output_csv = csv_path.replace(".csv", "_labeled.csv")
-    # Charger data et gt
-    with open(csv_path, 'r', newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        data = list(reader)
+        Ajoute une colonne 'label' aux flows en fonction de la ground truth.
+        """
+    # Charger les données
+    data = pd.read_csv(csv_path)
+    gt_data = pd.read_csv(gt_path)
 
-    gt_data = load_ground_truth(gt_path)
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
-    # TODO ;  TOUT REFAIRE
+    # Filtrer les GT pertinents par IP
+    gt_dict = {}
+    for _, row in gt_data.iterrows():
+        key = (row['src_ip'], row['dst_ip'])
+        if key not in gt_dict:
+            gt_dict[key] = []
+        gt_dict[key].append(row)
 
-    # Création d'un index par 5-tuple pour accélérer la recherche
-    # Clé : (src_ip, dst_ip, src_port, dst_port, protocol)
-    gt_index = {}
-    for g in gt_data:
-        key = (g['src_ip'], g['dst_ip'], g['src_port'], g['dst_port'], g['protocol'])
-        if key not in gt_index:
-            gt_index[key] = []
-        gt_index[key].append(g)
+    # Ajouter une colonne 'label' avec des valeurs par défaut à 0
+    data['label'] = 0
 
-    # Associer les labels
-    for row in data:
-        key = (row['src_ip'], row['dst_ip'], row['src_port'], row['dst_port'], row['protocol'])
-        row['label'] = 0
-        if key in gt_index:
-            flow_start = float(row['bidirectional_first_seen_ms'])/1000.0
-            flow_end = float(row['bidirectional_last_seen_ms'])/1000.0
+    # Vectorisation avec pandas
+    def check_match(row):
+        key = (row['src_ip'], row['dst_ip'])
+        if key in gt_dict:
+            for gt in gt_dict[key]:
+                if (row['src_port'] == gt['src_port'] and
+                        row['dst_port'] == gt['dst_port'] and
+                        row['protocol'] == gt['protocol'] and (
+                        # Comparaison bidirectionnelle
+                        (gt['first_timestamp_ms'] <= row['bidirectional_first_seen_ms'] <= gt['last_timestamp_ms'] or
+                         gt['first_timestamp_ms'] <= row['bidirectional_last_seen_ms'] <= gt['last_timestamp_ms']) or
+                        # Comparaison directionnelle source vers destination
+                        (gt['first_timestamp_ms'] <= row['src2dst_first_seen_ms'] <= gt['last_timestamp_ms'] or
+                         gt['first_timestamp_ms'] <= row['src2dst_last_seen_ms'] <= gt['last_timestamp_ms']) or
+                        # Comparaison directionnelle destination vers source
+                        (gt['first_timestamp_ms'] <= row['dst2src_first_seen_ms'] <= gt['last_timestamp_ms'] or
+                         gt['first_timestamp_ms'] <= row['dst2src_last_seen_ms'] <= gt['last_timestamp_ms'])
+                        )):
+                    return 1
+        return 0
 
-            # Vérifier si le flux intersecte une période de la ground truth
-            for g in gt_index[key]:
-                # Chevauchement temporel ?
-                if not (flow_end < g['start'] or flow_start > g['end']):
-                    row['label'] = 1
-                    break
+    # Appliquer la fonction de matching
+    data['label'] = data.apply(check_match, axis=1)
 
-    # Écriture du CSV labellisé
-    fieldnames = list(data[0].keys())
-    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(data)
-
-    print(f"Fichier labellisé: {output_csv}")
+    # Sauvegarder le fichier avec les labels
+    output_csv = os.path.join(destination, os.path.basename(csv_path))
+    data.to_csv(output_csv, index=False)
     return output_csv

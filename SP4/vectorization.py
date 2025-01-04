@@ -1,57 +1,53 @@
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-def vectorize_flows(df, categorical_cols=None, numeric_cols=None, label_col='label', apps_list=None, protocol_list=None):
+def vectorize_flows(df, categorical_cols, numeric_cols, label_col, unique_values: dict):
     """
     Transforme les flux en vecteurs de caractéristiques numériques à partir d'un DataFrame directement.
-    :return DataFrame: Les données transformées
+
+    Args:
+        df (pd.DataFrame): Le DataFrame contenant les flux.
+        categorical_cols (list): Colonnes catégoriques à vectoriser.
+        numeric_cols (list): Colonnes numériques à normaliser.
+        label_col (str): Nom de la colonne contenant les labels.
+        unique_values (dict): Dictionnaire contenant les ensembles de valeurs uniques pour les colonnes catégoriques.
+
+    Returns:
+        pd.DataFrame: DataFrame vectorisé avec les colonnes numériques normalisées et les colonnes catégoriques one-hot.
     """
-    if categorical_cols is None:
-        raise ValueError("Categorical columns must be specified")
-
-    if numeric_cols is None:
-        raise ValueError("Numeric columns must be specified")
-
-    # Check if the required columns exist
-    missing_cols = [col for col in numeric_cols if col not in df.columns]
+    # Vérification des colonnes manquantes
+    missing_cols = [col for col in numeric_cols + categorical_cols + [label_col] if col not in df.columns]
     if missing_cols:
         raise KeyError(f"Columns {missing_cols} not in index")
 
+    # Séparer les labels et les features
     y = df[label_col].values
     x = df[categorical_cols + numeric_cols].copy()
 
+    # Transformation des colonnes catégoriques
     for col in categorical_cols:
-        if col == 'protocol':
-            x['protocol'] = x['protocol'].apply(generic_one_hottizator, possible_values_set=protocol_list)
-        # elif col == 'application_name':
-        #     x['application_name'] = x['application_name'].apply(generic_one_hottizator, possible_values_set=apps_list)
-        elif col in ['src_ip', 'dst_ip']:
+        if col in ['src_ip', 'dst_ip']:
+            # Décomposition IP en parties
             x[col] = x[col].apply(ip_split)
-
-    if 'protocol' in x.columns:
-        protocol_expanded = pd.DataFrame(x['protocol'].tolist(), index=x.index)
-        protocol_expanded.columns = [f'protocol_{i}' for i in range(protocol_expanded.shape[1])]
-        x.drop(columns=['protocol'], inplace=True)
-        x = pd.concat([x, protocol_expanded], axis=1)
-
-    # if 'application_name' in x.columns:
-    #     apps_expanded = pd.DataFrame(x['application_name'].tolist(), index=x.index)
-    #     apps_expanded.columns = [f'app_{i}' for i in range(apps_expanded.shape[1])]
-    #     x.drop(columns=['application_name'], inplace=True)
-    #     x = pd.concat([x, apps_expanded], axis=1)
-
-    for ip_col in ['src_ip', 'dst_ip']:
-        if ip_col in x.columns:
-            ip_expanded = pd.DataFrame(x[ip_col].tolist(), index=x.index)
-            ip_expanded.columns = [f'{ip_col}_part_{i}' for i in range(ip_expanded.shape[1])]
-            x.drop(columns=[ip_col], inplace=True)
+            ip_expanded = pd.DataFrame(x[col].tolist(), index=x.index)
+            ip_expanded.columns = [f'{col}_part_{i}' for i in range(ip_expanded.shape[1])]
+            x.drop(columns=[col], inplace=True)
             x = pd.concat([x, ip_expanded], axis=1)
+        else:
+            # One-hot encoding pour les autres colonnes catégoriques
+            one_hot_vectors = x[col].apply(generic_one_hottizator, possible_values_set=unique_values[col])
+            one_hot_df = pd.DataFrame(one_hot_vectors.tolist(), index=x.index)
+            one_hot_df.columns = [f"{col}_onehot_{i}" for i in range(one_hot_df.shape[1])]
+            x.drop(columns=[col], inplace=True)
+            x = pd.concat([x, one_hot_df], axis=1)
 
+    # Normalisation des colonnes numériques
     scaler = StandardScaler()
     x[numeric_cols] = scaler.fit_transform(x[numeric_cols])
 
-    # regrouper x et y en df
+    # Ajouter la colonne label au DataFrame final
     x['label'] = y
+
     return x
 
 
@@ -71,10 +67,20 @@ def vectorize_flows(df, categorical_cols=None, numeric_cols=None, label_col='lab
 #     return [1 if i==app else 0 for i in apps_list]
 
 def generic_one_hottizator(value:str, possible_values_set :set)->list[int]:
-    value = str(value)
-    if value not in possible_values_set:
-        raise ValueError(f"Valeur inconnue : {value}")
-    return [1 if i==value else 0 for i in possible_values_set]
+    """
+    Retourne un vecteur one-hot pour la valeur spécifiée, avec une colonne supplémentaire indiquant si la valeur est inconnue.
+
+    Args:
+        value (str): La valeur à encoder.
+        possible_values_set (set): Ensemble des valeurs possibles pour l'encodage.
+
+    Returns:
+        list[int]: Vecteur one-hot avec une colonne supplémentaire pour les valeurs inconnues.
+    """
+    is_unknown = int(value not in possible_values_set)  # 1 si la valeur est inconnue
+    one_hot = [1 if i == value else 0 for i in possible_values_set]
+    one_hot.append(is_unknown)  # Ajouter la colonne pour les valeurs inconnues
+    return one_hot
 
 def ip_split(ip:str)->list[int]:
     try:
