@@ -51,7 +51,7 @@ def quels_champs_sont_constants(csv_path: str)->dict:
         for value in moyens[field]:
             print("\t\t"+value)
 
-# quels_champs_sont_constants("C:\\Projets_GIT_C\\ENSIBS\\ia_detection\\IADI_LagPey\\pcap_folder\\dataset\\csv\\trace_a_10.csv")
+# quels_champs_sont_constants("C:\\Projets_GIT_C\\ENSIBS\\ia_detection\\IADI_LagPey\\pcap_folder\\dataset_train\\csv\\trace_a_10.csv")
 
 def valeurs_uniques(csv_path: str, cols_to_look: list, unique_values: dict[str, set]) -> dict[str, set]:
     """
@@ -86,6 +86,19 @@ def valeurs_uniques(csv_path: str, cols_to_look: list, unique_values: dict[str, 
 
     return unique_values
 
+def ip_to_class(ip:str)->str:
+    """
+    Convertit une adresse IP en classe d'adresse.
+    """
+    ip = ip.split(".")
+    if ip[0] == "10":
+        return "A"
+    elif ip[0] == "172" and 16 <= int(ip[1]) <= 31:
+        return "B"
+    elif ip[0] == "192" and ip[1] == "168":
+        return "C"
+    else:
+        return "D"
 
 
 def fix_ligne10000(csv_path: str)->str:
@@ -127,7 +140,7 @@ def fix_ligne10000(csv_path: str)->str:
 
     return new_csv_path
 
-# fix_ligne10000("C:\\Projets_GIT_C\\ENSIBS\\ia_detection\\IADI_LagPey\\pcap_folder\\dataset\\csv\\all_data_with_fan_labeled.csv")
+# fix_ligne10000("C:\\Projets_GIT_C\\ENSIBS\\ia_detection\\IADI_LagPey\\pcap_folder\\dataset_train\\csv\\all_data_with_fan_labeled.csv")
 
 def subset_divizor(df, list_of_values, field):
     """

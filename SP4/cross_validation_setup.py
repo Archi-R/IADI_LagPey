@@ -1,8 +1,10 @@
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import recall_score, precision_score
 from sklearn.model_selection import train_test_split, KFold, GridSearchCV
-from joblib import dump
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score, roc_auc_score, roc_curve
+from joblib import dump, load
+import os
+import matplotlib.pyplot as plt
 
 
 def train(model, vectorized_df, label_col='label', save_path='trained_model.joblib'):
@@ -27,89 +29,137 @@ def train(model, vectorized_df, label_col='label', save_path='trained_model.jobl
     dump(model, save_path)
 
 
-def train_rf(rf, vectorized_df, save_path, best_params=None, label_col='label'):
+def train_rf(vectorized_df, save_path, label_col='label'):
     """
     Entraîne une Random Forest sur les données vectorisées en utilisant une recherche d'hyperparamètres.
     - Utilise une validation croisée avec KFold.
     - Effectue une Grid Search pour trouver les meilleurs hyperparamètres.
     - Sauvegarde le modèle avec les meilleurs hyperparamètres.
+    - Sauvegarde les ensembles d'entraînement et de test.
     """
 
-    # Paramètres pour la recherche d'hyperparamètres : initial ou raffiné
-    param_grid = None
-    if best_params is None:
-        # Définir une recherche initiale complète pour le premier fichier
-        param_grid = {
-            'n_estimators': [50, 100, 200],
-            'max_depth': [None, 10, 20, 30],
-            'min_samples_split': [2, 5, 10],
-            'min_samples_leaf': [1, 2, 4],
-            'bootstrap': [True, False]
-        }
-    else:
-        param_grid = refine_param_grid(best_params)
+    # Initialisation du modèle Random Forest
+    rf = RandomForestClassifier(random_state=42)
 
-    # Séparation des features et du label
+    # Paramètres pour la recherche d'hyperparamètres
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20, 30],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4],
+        'bootstrap': [True, False]
+    }
+
+    # Vérifier la présence de la colonne label
+    if label_col not in vectorized_df.columns:
+        raise KeyError(f"Column '{label_col}' not found in the dataset.")
+
+    # Séparation des features et des labels
     y = vectorized_df[label_col].values
     X = vectorized_df.drop(columns=[label_col])
+
+    # Split en train/test et sauvegarde
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    split_save_path = os.path.join(save_path, 'train_test_split.joblib')
+    dump((X_train, X_test, y_train, y_test), split_save_path)
+    print(f"Ensembles train/test sauvegardés à : {split_save_path}")
 
     # Configuration de la validation croisée
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-    # Si aucun modèle n'est fourni, entraîner un modèle par défaut
-    if rf is None:
-        rf = RandomForestClassifier()
-        rf.fit(X, y)
-        return rf, None, None
-
     # Grid Search avec validation croisée
     grid_search = GridSearchCV(estimator=rf, param_grid=param_grid,
-                               cv=kf, scoring='accuracy', n_jobs=-1, verbose=2)
+                               cv=kf, scoring='accuracy', n_jobs=-1, verbose=0)
 
-    # Exécution de la recherche
-    print("Recherche des meilleurs hyperparamètres...")
-    grid_search.fit(X, y)
+    try:
+        # Exécution de la recherche
+        grid_search.fit(X_train, y_train)
 
-    # Meilleurs paramètres et score
-    best_params = grid_search.best_params_
-    best_score = grid_search.best_score_
-    # print(f"Meilleurs hyperparamètres : {best_params}")
-    # print(f"Score de validation croisée : {best_score}")
+        # Meilleurs paramètres et score
+        best_params = grid_search.best_params_
+        best_score = grid_search.best_score_
+        print(f"Meilleurs hyperparamètres : {best_params}")
+        print(f"Score de validation croisée : {best_score:.4f}")
 
-    # Sauvegarde du meilleur modèle
-    best_model = grid_search.best_estimator_
-    dump(best_model, save_path)
-    print(f"Meilleur modèle sauvegardé à : {save_path}")
+        # Sauvegarde du meilleur modèle
+        best_model = grid_search.best_estimator_
 
-    return best_model, best_params, best_score
+        # Évaluer le modèle
+        try:
+            evaluate(best_model, X_test, y_test, save_path)
+        except Exception as e:
+            print(f"Erreur lors de l'évaluation : {e}")
 
+        return best_model, best_params, best_score
 
-# Affiner autour des meilleurs paramètres pour les fichiers suivants
-def refine_param_grid(best_params):
+    except Exception as e:
+        print(f"Erreur lors de l'entraînement : {e}")
+        raise e
+
+def evaluate(model, X_test, y_test, save_path):
     """
-    Crée une grille affinée basée sur les meilleurs paramètres.
+    Évalue le modèle sur plusieurs métriques et génère une courbe ROC.
+
+    Args:
+        model: Modèle entraîné.
+        X_test: Données de test (features).
+        y_test: Données de test (labels).
+        save_path: Chemin où sauvegarder les résultats et la courbe ROC.
     """
-    refined_grid = {
-        'n_estimators': [
-            max(50, best_params.get('n_estimators', 100) - 50),
-            best_params.get('n_estimators', 100),
-            best_params.get('n_estimators', 100) + 50
-        ],
-        'max_depth': [
-            None if best_params.get('max_depth') is None else max(1, best_params['max_depth'] - 10),
-            best_params.get('max_depth', None),
-            None if best_params.get('max_depth') is None else best_params['max_depth'] + 10
-        ],
-        'min_samples_split': [
-            max(2, best_params.get('min_samples_split', 2) - 2),
-            best_params.get('min_samples_split', 2),
-            best_params.get('min_samples_split', 2) + 2
-        ],
-        'min_samples_leaf': [
-            max(1, best_params.get('min_samples_leaf', 1) - 1),
-            best_params.get('min_samples_leaf', 1),
-            best_params.get('min_samples_leaf', 1) + 1
-        ],
-        'bootstrap': [best_params.get('bootstrap', True)]
+    # Prédictions
+    y_pred = model.predict(X_test)
+    y_pred_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, 'predict_proba') else None
+
+    # Calcul des métriques
+    metrics = {
+        'accuracy': accuracy_score(y_test, y_pred),
+        'recall': recall_score(y_test, y_pred, zero_division=0),
+        'precision': precision_score(y_test, y_pred, zero_division=0),
+        'f1_score': f1_score(y_test, y_pred, zero_division=0),
     }
-    return refined_grid
+
+    # Calcul du ROC AUC si applicable
+    if y_pred_proba is not None:
+        metrics['roc_auc'] = roc_auc_score(y_test, y_pred_proba)
+
+        # Générer la courbe ROC
+        fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+        plt.figure()
+        plt.plot(fpr, tpr, label='ROC Curve (AUC = {:.4f})'.format(metrics['roc_auc']))
+        plt.plot([0, 1], [0, 1], linestyle='--', color='grey')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('ROC Curve')
+        plt.legend()
+        os.makedirs(os.path.join(save_path, 'perf'), exist_ok=True)
+        roc_path = os.path.join(save_path, 'perf', 'roc.png')
+        plt.savefig(roc_path)
+        plt.close()
+        print(f"Courbe ROC sauvegardée à : {roc_path}")
+
+    # Sauvegarder les métriques dans un CSV
+    os.makedirs(os.path.join(save_path, 'perf'), exist_ok=True)
+    metrics_path = os.path.join(save_path, 'perf', 'perf.csv')
+    metrics_df = pd.DataFrame([metrics])
+    metrics_df.to_csv(metrics_path, index=False)
+    print(f"Métriques sauvegardées à : {metrics_path}")
+
+def evaluate_saved(path):
+    """
+    Charge les ensembles et le modèle sauvegardés, puis évalue le modèle.
+
+    Args:
+        path (str): Chemin vers le dossier contenant le modèle et les ensembles sauvegardés.
+    """
+    # Charger les ensembles train/test
+    split_save_path = os.path.join(path, 'train_test_split.joblib')
+    X_train, X_test, y_train, y_test = load(split_save_path)
+    print(f"Ensembles train/test chargés depuis : {split_save_path}")
+
+    # Charger le modèle nomme model_{app_name}.joblib
+    model_path = os.path.join(path, f"model_{os.path.basename(path)}.joblib")
+    model = load(model_path)
+    print(f"Modèle chargé depuis : {model_path}")
+
+    # Évaluer le modèle
+    evaluate(model, X_test, y_test, path)
