@@ -86,20 +86,6 @@ def valeurs_uniques(csv_path: str, cols_to_look: list, unique_values: dict[str, 
 
     return unique_values
 
-def ip_to_class(ip:str)->str:
-    """
-    Convertit une adresse IP en classe d'adresse.
-    """
-    ip = ip.split(".")
-    if ip[0] == "10":
-        return "A"
-    elif ip[0] == "172" and 16 <= int(ip[1]) <= 31:
-        return "B"
-    elif ip[0] == "192" and ip[1] == "168":
-        return "C"
-    else:
-        return "D"
-
 
 def fix_ligne10000(csv_path: str)->str:
     import csv
@@ -166,3 +152,52 @@ def json_set_int_encoder(obj):
         return int(obj)
     else:
         return obj
+
+
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import joblib
+import os
+
+def get_scaler(scaler_path: str)->StandardScaler:
+    if os.path.exists(scaler_path):
+        scaler = joblib.load(scaler_path)
+    else:
+        scaler = StandardScaler()
+        joblib.dump(scaler, scaler_path)
+
+    return scaler
+
+def get_onehotencoder(onehot_path: str)->StandardScaler:
+    if os.path.exists(onehot_path):
+        onehot = joblib.load(onehot_path)
+    else:
+        onehot = OneHotEncoder()
+        joblib.dump(onehot, onehot_path)
+
+    return onehot
+
+
+def nettoyeur(folder_path, log_file):
+    """
+    Nettoie les fichiers d'un dossier récursivement, sans supprimer le dossier lui-même
+    supprime aussi les dossier enfants et leurs fichiers
+    :param folder_path: chemin du dossier
+    :return: None
+    """
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            try:
+                os.remove(os.path.join(root, file))
+            except Exception as e:
+                date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                txt_error = f"{date},nettoyeur,{os.path.join(root, file)},{e}\n"
+                print(txt_error)
+
+        for dir in dirs:
+            try:
+                nettoyeur(os.path.join(root, dir), log_file)
+                os.rmdir(os.path.join(root, dir))
+            except Exception as e:
+                date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                txt_error = f"{date},nettoyeur,{os.path.join(root, dir)},{e}\n"
+                print(txt_error)

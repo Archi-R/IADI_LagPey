@@ -43,11 +43,11 @@ def train_rf(vectorized_df, save_path, label_col='label'):
 
     # Paramètres pour la recherche d'hyperparamètres
     param_grid = {
-        'n_estimators': [50, 100, 200],
-        'max_depth': [None, 10, 20, 30],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-        'bootstrap': [True, False]
+        'n_estimators': [50, 100],  # Réduit le nombre d'arbres
+        'max_depth': [10, 20],  # Réduit la profondeur maximale
+        'min_samples_split': [2, 5],
+        'min_samples_leaf': [1, 2],
+        'bootstrap': [True]
     }
 
     # Vérifier la présence de la colonne label
@@ -69,7 +69,7 @@ def train_rf(vectorized_df, save_path, label_col='label'):
 
     # Grid Search avec validation croisée
     grid_search = GridSearchCV(estimator=rf, param_grid=param_grid,
-                               cv=kf, scoring='accuracy', n_jobs=-1, verbose=0)
+                               cv=kf, scoring='accuracy', n_jobs=2, verbose=0)
 
     try:
         # Exécution de la recherche
