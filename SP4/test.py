@@ -4,6 +4,7 @@ from datetime import datetime
 import sys
 from evaluation import evaluate_flows
 
+
 import joblib
 
 sys.path.append('/home/logstudent/IADI_LagPey')
@@ -14,10 +15,10 @@ from SP4.labeling import *
 from SP4.vectorization import *
 from labeling import label_flows
 from vectorization import vectorize_flows
-from cross_validation_setup import train_rf, evaluate_saved
+from cross_validation_setup import train_rf, train_naive_bayes, train_knn
 
 
-def pipeline(limit, start_at_phase, stop_at_phase, is_test=False):
+def pipeline(limit, start_at_phase, stop_at_phase, is_test=False, model_type='rf'):
     # create or clear if exists the log file
     log_file = open("log_file.csv", "w")
     log_file.write("date,etape,fichier,erreur\n")
@@ -77,7 +78,11 @@ def pipeline(limit, start_at_phase, stop_at_phase, is_test=False):
         print("Temps étape : ", datetime.now() - last_etape_end_time)
         print("Temps total : ", datetime.now() - start_time)
     if (start_at_phase <= 6 <= stop_at_phase) and not is_test:
-        etape_6_entrainement(csv_vectorized_dir, models_path)
+        etape_6_entrainement(csv_vectorized_dir, models_path, model_type)
+        print("Temps étape : ", datetime.now() - last_etape_end_time)
+        print("Temps total : ", datetime.now() - start_time)
+    if (start_at_phase <= 7 <= stop_at_phase) and not is_test:
+        etape_7_entrainement(csv_vectorized_dir, models_path)
         print("Temps étape : ", datetime.now() - last_etape_end_time)
         print("Temps total : ", datetime.now() - start_time)
 
@@ -145,7 +150,7 @@ def etape_4_separation(from_dir, csv_sep_protocol_dir, is_test=False):
     etape = 4
     labeled_csvs = [os.path.join(from_dir, f) for f in os.listdir(from_dir) if f.endswith(".csv")]
 
-    apps_sous_ensembles = ["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"]
+    apps_sous_ensembles = get_app_list()
     separated_csvs = []
 
     # Vérifier s'il existe des fichiers étiquetés
@@ -190,58 +195,11 @@ def etape_5_vectorisation(csv_sep_protocol_dir, csv_vectorized_dir, is_test=Fals
 
     etape = 5
 
-    categorical_cols = [
-        'protocol',
-        'src_ip',
-        'dst_ip',
-        #'src_port',
-        #'dst_port',
-        'application_name',
-        'application_category_name',
-        'requested_server_name'
-    ]
-
-    numeric_cols = [
-        'bidirectional_packets',  # Paquets bidirectionnels
-        'bidirectional_bytes',  # Octets bidirectionnels
-        'fan_in',  # Nombre d'adresses connectées vers cette IP
-        'fan_out',  # Nombre d'adresses connectées depuis cette IP
-        'bidirectional_duration_ms',  # Durée bidirectionnelle
-        'src2dst_duration_ms',  # Durée source -> destination
-        'src2dst_packets',  # Paquets source -> destination
-        'dst2src_packets',  # Paquets destination -> source
-        'src2dst_bytes',  # Octets source -> destination
-        'dst2src_bytes',  # Octets destination -> source
-        'dst2src_duration_ms',  # Durée destination -> source
-        'dst2src_packets',  # Paquets destination -> source
-        'dst2src_bytes',  # Octets destination -> source
-        'bidirectional_mean_ps',  # Moyenne de paquets par seconde bidirectionnels
-        'bidirectional_max_ps',  # Maximum de paquets par seconde bidirectionnels
-        'src2dst_mean_ps',  # Moyenne de paquets par seconde source -> destination
-        'src2dst_max_ps',  # Maximum de paquets par seconde source -> destination
-        'dst2src_mean_ps',  # Moyenne de paquets par seconde destination -> source
-        'dst2src_max_ps',  # Maximum de paquets par seconde destination -> source
-    ]
-
-    for app_name in ["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"]:
+    for app_name in get_app_list():
         try:
-            # Concaténer les fichiers en un seul DataFrame
             separated_csvs = [os.path.join(csv_sep_protocol_dir, app_name, f) for f in
                               os.listdir(os.path.join(csv_sep_protocol_dir, app_name)) if f.endswith(".csv")]
-
-            dataset = None
-            for f in separated_csvs:
-                try:
-                    temp_df = pd.read_csv(f)
-                    # Vérifier les colonnes vides ou problématiques et ignorer ces lignes
-                    temp_df.dropna(how='any', inplace=True)
-                    # Ajouter au dataset global
-                    if dataset is None:
-                        dataset = temp_df
-                    else:
-                        dataset = pd.concat([dataset, temp_df], ignore_index=True)
-                except Exception as e:
-                    print(f"Erreur lors du traitement du fichier {f}: {e}")
+            dataset = pd.concat([pd.read_csv(f, on_bad_lines='skip') for f in separated_csvs], ignore_index=True)
 
             if is_test: # test
                 label_col = None
@@ -249,21 +207,24 @@ def etape_5_vectorisation(csv_sep_protocol_dir, csv_vectorized_dir, is_test=Fals
 
                 scaler_path = os.path.join(trained_scaler_ohe_dir, app_name, "scaler.joblib")
                 ohe_path = os.path.join(trained_scaler_ohe_dir, app_name, "ohe.joblib")
+
+
             else: # train
                 label_col = 'label'
-
                 scaler_path = os.path.join(csv_vectorized_dir, app_name, "scaler.joblib")
                 ohe_path = os.path.join(csv_vectorized_dir, app_name, "ohe.joblib")
 
+            vectorized_df = vectorize_flows(
+                dataset,
+                get_categorical_cols(),
+                get_numeric_cols(),
+                label_col=label_col,
+                scaler_path=scaler_path,
+                one_hot_encoder_path=ohe_path,
+                is_test=is_test
+            )
 
 
-            vectorized_df = vectorize_flows(dataset
-                                             , categorical_cols=categorical_cols
-                                             , numeric_cols=numeric_cols
-                                             , label_col=label_col
-                                             , scaler_path=scaler_path
-                                             , one_hot_encoder_path=ohe_path
-                                             , is_test=is_test)
 
             # enregister le fichier vectorisé dans 5.vectorized/app_name/app_name_vectorized.csv
             vectorized_csv_path = os.path.join(csv_vectorized_dir, app_name, f"{app_name}_vectorized.csv")
@@ -276,41 +237,65 @@ def etape_5_vectorisation(csv_sep_protocol_dir, csv_vectorized_dir, is_test=Fals
             print(txt_error)
 
 
-def etape_6_entrainement(csv_vectorized_dir, models_path):
-    print("6. Entrainement et sauvegarde du modèle")
+def etape_6_entrainement(csv_vectorized_dir, models_path, model_type):
+    print("6. Entrainement et sauvegarde du modèle " + model_type)
     etape = 6
 
-    for app_name in ["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"]:
+    for app_name in get_app_list():
         try:
-            save_path = os.path.join(models_path, app_name)
+            save_path = os.path.join(models_path,model_type, app_name)
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
 
             dataset = pd.read_csv(os.path.join(csv_vectorized_dir, app_name, f"{app_name}_vectorized.csv"))
             print(app_name)
-            rf, best_params, best_score = train_rf(dataset, save_path)
+
+            if(model_type == 'rf'):
+                model, best_params, best_score = train_rf(dataset, save_path)
+            elif(model_type == 'nb'):
+                model, best_params, best_score = train_naive_bayes(dataset, save_path)
+            elif(model_type == 'knn'):
+                model, best_params, best_score = train_knn(dataset, save_path)
 
             # enregistrement du modèle
             model_path = os.path.join(save_path, f"model_{app_name}.joblib")
-            joblib.dump(rf, model_path)
+            # enregistrement des best_params en csv
+            best_params_path = os.path.join(save_path, f"{model_type}best_params_{app_name}.csv")
+            with open(best_params_path, 'w') as f:
+                for key in best_params.keys():
+                    f.write("%s,%s\n" % (key, best_params[key]))
+            joblib.dump(model, model_path)
             print("\n\n")
 
         except Exception as e:
-            raise e
             date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             txt_error = f"{date},{etape},{app_name},{e}\n"
             print(txt_error)
 
+def etape_7_entrainement(csv_vectorized_dir, models_path):
+    print("7. Entrainement et sauvegarde de tout les modèles")
+    models = ["rf", "nb", "knn"]
+    for model in models:
+        etape_6_entrainement(csv_vectorized_dir, models_path, model)
 
 if __name__ == '__main__':
-    # pipeline(54, 6, 6, is_test=False)
+    pipeline(54, 6, 6, is_test=False, model_type='nb')
 
-    pipeline(28, 0, 2, is_test=True)
+    #pipeline(28, 0, 2, is_test=True)
 
-    evaluate_flows(
-        test_csv_path="../dataset_test/csv/2.fan/trace_b_21.csv",
-        train_vectorized_dir="../dataset_train/csv/5.vectorized",
-        models_dir="../models",
-        app_names=["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"],
-        output_file="../Challenge1_rendu.csv"
-    )
+    # evaluate_flows("../dataset_test/csv/2.fan/trace_b_21.csv",
+    #                "../dataset_train/csv/5.vectorized",
+    #                "../models",
+    #                get_app_list(),
+    #                "../Challenge1_rendu.csv",
+    #                get_categorical_cols(),
+    #                get_numeric_cols()
+    #               )
+
+    # OLD_evaluate_flows(
+    #     test_csv_path="../dataset_test/csv/2.fan/trace_b_21.csv",
+    #     train_vectorized_dir="../dataset_train/csv/5.vectorized",
+    #     models_dir="../models",
+    #     app_names=["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"],
+    #     output_file="../Challenge1_rendu.csv"
+    # )

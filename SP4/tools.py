@@ -1,4 +1,4 @@
-
+from datetime import datetime
 
 from pcapLoader import csv_to_reader
 import pandas as pd
@@ -201,3 +201,58 @@ def nettoyeur(folder_path, log_file):
                 date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 txt_error = f"{date},nettoyeur,{os.path.join(root, dir)},{e}\n"
                 print(txt_error)
+
+def get_app_list()->list[str]:
+    return ["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"]
+
+def get_categorical_cols()->list[str]:
+    return [
+        'protocol',
+        'src_ip',
+        'dst_ip',
+        #'src_port',
+        #'dst_port',
+        'application_name',
+        'application_category_name',
+        'requested_server_name'
+    ]
+
+def get_numeric_cols()->list[str]:
+    return [
+        'bidirectional_packets',  # Paquets bidirectionnels
+        'bidirectional_bytes',  # Octets bidirectionnels
+        'fan_in',  # Nombre d'adresses connectées vers cette IP
+        'fan_out',  # Nombre d'adresses connectées depuis cette IP
+        'bidirectional_duration_ms',  # Durée bidirectionnelle
+        'src2dst_duration_ms',  # Durée source -> destination
+        'src2dst_packets',  # Paquets source -> destination
+        'src2dst_bytes',  # Octets source -> destination
+        'dst2src_duration_ms',  # Durée destination -> source
+        'dst2src_packets',  # Paquets destination -> source
+        'dst2src_bytes',  # Octets destination -> source
+        'bidirectional_mean_ps',  # Moyenne de paquets par seconde bidirectionnels
+        'bidirectional_max_ps',  # Maximum de paquets par seconde bidirectionnels
+        'src2dst_mean_ps',  # Moyenne de paquets par seconde source -> destination
+        'src2dst_max_ps',  # Maximum de paquets par seconde source -> destination
+        'dst2src_mean_ps',  # Moyenne de paquets par seconde destination -> source
+        'dst2src_max_ps',  # Maximum de paquets par seconde destination -> source
+    ]
+
+
+def clean_df(df, dropna_any=True, drop_duplicates=True):
+    """
+    Nettoie un DataFrame en supprimant (au choix) :
+      - Lignes avec des champs vides
+      - Lignes dupliquées
+    Retourne le DataFrame nettoyé.
+    """
+
+    # Si demandé, on supprime les lignes contenant au moins un champ NaN
+    if dropna_any:
+        df.dropna(how='any', inplace=True)
+
+    # Si demandé, on supprime les doublons
+    if drop_duplicates:
+        df.drop_duplicates(inplace=True)
+
+    return df

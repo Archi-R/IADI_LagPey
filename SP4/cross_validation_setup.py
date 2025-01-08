@@ -1,10 +1,13 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split, KFold, GridSearchCV
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score, roc_auc_score, roc_curve
 from joblib import dump, load
 import os
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
 
 
 def train(model, vectorized_df, label_col='label', save_path='trained_model.joblib'):
@@ -27,6 +30,90 @@ def train(model, vectorized_df, label_col='label', save_path='trained_model.jobl
 
     # Sauvegarde du modèle
     dump(model, save_path)
+
+def train_knn(vectorized_df, save_path, label_col='label'):
+    """
+    Entraîne un classificateur k-NN sur les données vectorisées en utilisant une recherche d'hyperparamètres.
+    - Utilise une validation croisée avec KFold.
+    - Effectue une Grid Search pour trouver la meilleure valeur de k.
+    - Sauvegarde le modèle avec les meilleurs hyperparamètres.
+    """
+    knn = KNeighborsClassifier()
+
+    param_grid = {
+        'n_neighbors': [9, 5],
+        'weights': ['uniform'],
+        'metric': ['euclidean']
+    }
+
+    if label_col not in vectorized_df.columns:
+        raise KeyError(f"Column '{label_col}' not found in the dataset.")
+
+    y = vectorized_df[label_col].values
+    X = vectorized_df.drop(columns=[label_col])
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    split_save_path = os.path.join(save_path, 'train_test_split_knn.joblib')
+    dump((X_train, X_test, y_train, y_test), split_save_path)
+    print(f"Ensembles train/test sauvegardés à : {split_save_path}")
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+    grid_search = GridSearchCV(estimator=knn, param_grid=param_grid,
+                               cv=kf, scoring='accuracy', n_jobs=2, verbose=0)
+
+    try:
+        grid_search.fit(X_train, y_train)
+
+        best_params = grid_search.best_params_
+        best_score = grid_search.best_score_
+        print(f"Meilleurs hyperparamètres k-NN : {best_params}")
+        print(f"Score de validation croisée : {best_score:.4f}")
+
+        best_model = grid_search.best_estimator_
+
+        evaluate(best_model, X_test, y_test, save_path)
+
+        return best_model, best_params, best_score
+
+    except Exception as e:
+        print(f"Erreur lors de l'entraînement k-NN : {e}")
+        raise e
+
+def train_naive_bayes(vectorized_df, save_path, label_col='label'):
+    if label_col not in vectorized_df.columns:
+        raise KeyError(f"Column '{label_col}' not found in the dataset.")
+
+    y = vectorized_df[label_col].values
+    X = vectorized_df.drop(columns=[label_col])
+
+    if X.isnull().any().any():
+        raise ValueError("Données manquantes détectées.")
+
+    if (X < 0).any().any():
+        # transformation des données pour éliminer les valeurs négatives
+        scaler = MinMaxScaler()
+        X = scaler.fit_transform(X)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    print(f"Tailles des ensembles : X_train = {X_train.shape}, y_train = {y_train.shape}")
+
+    dump((X_train, X_test, y_train, y_test), os.path.join(save_path, 'train_test_split_nb.joblib'))
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    param_grid = {'alpha': [0.5, 1.0, 2.0]}
+    grid_search = GridSearchCV(estimator=MultinomialNB(), param_grid=param_grid,
+                               cv=kf, scoring='accuracy', n_jobs=2, verbose=0)
+
+    grid_search.fit(X_train, y_train)  # Assurez-vous d'utiliser y_train ici
+
+    best_model = grid_search.best_estimator_
+
+    evaluate(best_model, X_test, y_test, save_path)
+    print(f"Meilleurs hyperparamètres : {grid_search.best_params_}")
+    return best_model, grid_search.best_params_, grid_search.best_score_
+
 
 
 def train_rf(vectorized_df, save_path, label_col='label'):
