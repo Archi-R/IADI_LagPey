@@ -1,15 +1,14 @@
-import numpy as np
+import os
 
-def match_and_predict_flowfile(
-    flow_file_path,          # "FLOW_FILE_1.csv"
-    flows_folder,            # "dataset_test/2.fan/"
-    output_file,             # ex: "FLOW_FILE_1_labeled.csv"
-    categorical_cols,
-    numeric_cols,
-    train_vectorized_dir,    # dossier contenant scalers/encoders
-    models_dir,              # dossier contenant les modèles
-    app_names
-):
+import numpy as np
+import pandas as pd
+from joblib import load
+
+from SP4.tools import get_app_list, get_categorical_cols, get_numeric_cols, subset_divizor
+from SP4.vectorization import vectorize_flows
+
+
+def match_and_predict_flowfile():
     """
     Lis un flow_file (FLOW_FILE_1.csv), fait un merge avec
     les CSV du dossier 2.fan, applique la pipeline de séparation
@@ -20,6 +19,16 @@ def match_and_predict_flowfile(
       - La séparation (étape 4) se base sur "application_name".
       - On a un fallback "unknown" si la 'application_name' est manquante.
     """
+
+    flow_file_path = "../FLOW_FILE_1.csv"
+    flows_folder = "../dataset_test/2.fan/"
+    output_file = "../FLOW_FILE_1_labeled.csv"
+    categorical_cols = get_categorical_cols()
+    numeric_cols = get_numeric_cols()
+    train_vectorized_dir = "../dataset_train/csv/5.vectorized"
+    models_dir = "../models"
+    app_names = get_app_list()
+    full_app_list = list(app_names) + ["unknown"]
 
     # 1) Lecture du flow_file (celui où 'lab' est parfois '?')
     print("[INFO] Lecture de", flow_file_path)
@@ -52,26 +61,23 @@ def match_and_predict_flowfile(
     print("[INFO] Fusion des données (merge) sur les clefs :", merge_keys)
     merged_df = flow_file_df.merge(
         big_flows_df,
-        how="left",    # ou "inner" si on veut uniquement les matches
+        how="left",  # ou "inner" si on veut uniquement les matches
         on=merge_keys
     )
-
+    dict_of_separated_df = {}
     # 4) Gérer l'application_name manquante => "unknown"
     if "application_name" not in merged_df.columns:
         merged_df["application_name"] = "unknown"
     else:
-        merged_df["application_name"] = merged_df["application_name"].fillna("unknown")
+        dict_of_separated_df = subset_divizor(merged_df, app_names, "application_name", True)
 
     # 5) Prédiction pour chaque application
     result_records = []
 
     # On ajoute la classe "unknown" pour tout flux non matché
-    full_app_list = list(app_names) + ["unknown"]
-    # Optionnel : on retire les doublons si "unknown" est déjà dans app_names
-    full_app_list = list(set(full_app_list))
 
     for app_name in full_app_list:
-        subset_app = merged_df[merged_df["application_name"] == app_name].copy()
+        subset_app = dict_of_separated_df.get(app_name)
         if subset_app.empty:
             continue
 

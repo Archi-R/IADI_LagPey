@@ -128,17 +128,25 @@ def fix_ligne10000(csv_path: str)->str:
 
 # fix_ligne10000("C:\\Projets_GIT_C\\ENSIBS\\ia_detection\\IADI_LagPey\\pcap_folder\\dataset_train\\csv\\all_data_with_fan_labeled.csv")
 
-def subset_divizor(df, list_of_values, field):
+def subset_divizor(df, list_of_values, field, is_evaluating_challenge):
     """
-    Divise un dataframe en sous-dataframes selon les valeurs d'un champ
-    :param df:
-    :param list_of_values:
-    :param field:
+    Divise un dataframe en sous-dataframes selon les valeurs d'un champ.
+    Si une ligne ne correspond à aucune valeur ou ne contient aucune des valeurs, elle est mise dans 'unknown'.
+
+    :param df: pandas DataFrame
+    :param list_of_values: Liste des valeurs à utiliser pour diviser le DataFrame
+    :param field: Nom du champ (colonne) utilisé pour la division
     :return: dict de sous-dataframes
     """
     dict_apps = {}
+
+    # Initialise les sous-dataframes pour les valeurs de la liste
     for app in list_of_values:
-        dict_apps[app] = df[(df[field] == app) | (df[field].str.contains(app))]
+        dict_apps[app] = df[(df[field] == app) | (df[field].str.contains(app, na=False))]
+    if is_evaluating_challenge :
+        # Trouve les lignes qui ne correspondent à aucune valeur de la liste
+        matched_indexes = pd.concat(dict_apps.values()).index
+        dict_apps["unknown"] = df.loc[~df.index.isin(matched_indexes)]
 
     return dict_apps
 
@@ -256,3 +264,21 @@ def clean_df(df, dropna_any=True, drop_duplicates=True):
         df.drop_duplicates(inplace=True)
 
     return df
+
+def get_params_for_model(model_path):
+    """
+    Récupère les paramètres utilisés pour entraîner un modèle.
+    """
+    # Charger le modèle
+    model = joblib.load(model_path)
+
+    # Extraire les paramètres
+    params = model.get_params()
+
+    param_interessant = ['n_estimators', 'max_depth', 'min_samples_split']
+    params = {k: v for k, v in params.items() if k in param_interessant}
+
+    return params
+
+for app in get_app_list():
+    print(app, get_params_for_model(f"../models/rf/{app}/model_{app}.joblib"))

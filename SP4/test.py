@@ -279,9 +279,9 @@ def etape_7_entrainement(csv_vectorized_dir, models_path):
         etape_6_entrainement(csv_vectorized_dir, models_path, model)
 
 if __name__ == '__main__':
-    pipeline(54, 6, 6, is_test=False, model_type='nb')
+    # pipeline(54, 6, 6, is_test=False, model_type='nb')
 
-    #pipeline(28, 0, 2, is_test=True)
+    # pipeline(28, 0, 2, is_test=True)
 
     # evaluate_flows("../dataset_test/csv/2.fan/trace_b_21.csv",
     #                "../dataset_train/csv/5.vectorized",
@@ -291,11 +291,9 @@ if __name__ == '__main__':
     #                get_categorical_cols(),
     #                get_numeric_cols()
     #               )
+    from challenge_evaluator import match_and_predict_flowfile
+    match_and_predict_flowfile()
 
-    # OLD_evaluate_flows(
-    #     test_csv_path="../dataset_test/csv/2.fan/trace_b_21.csv",
-    #     train_vectorized_dir="../dataset_train/csv/5.vectorized",
-    #     models_dir="../models",
-    #     app_names=["HTTP", "IMAP", "DNS", "SMTP", "ICMP", "SSH", "FTP"],
-    #     output_file="../Challenge1_rendu.csv"
-    # )
+
+
+
